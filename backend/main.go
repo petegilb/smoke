@@ -13,6 +13,8 @@ import (
 
 var appIDRegex = regexp.MustCompile(`/apps/(\d+)/`)
 
+var popularWishlistUrl = "https://store.steampowered.com/search/results/?filter=popularwishlist&json=1&count=500&page=%d"
+
 type storeResponse struct {
     Desc string `json:"desc"`
 	Items []struct {
@@ -21,11 +23,10 @@ type storeResponse struct {
 	} `json:"items"`
 }
 
-
-func main() {
+func getPopularWishlists(page int){
     log.Println("Starting Steam store search...")
 
-    requestURL := fmt.Sprintf("https://store.steampowered.com/search/results/?filter=popularwishlist&json=1&count=500&page=1")
+    requestURL := fmt.Sprintf(popularWishlistUrl, page)
     res, err := http.Get(requestURL)
     if err != nil {
         log.Printf("error making http request: %s\n", err)
@@ -56,4 +57,9 @@ func main() {
             log.Printf("#%d: %s (appid: %d)\n", i+1, game.Name, appID)
         }
     }
+}
+
+func main() {
+    // getPopularWishlists(1)
+    getAppDetails(3788800)
 }
