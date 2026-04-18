@@ -62,4 +62,5 @@ func getPopularWishlists(page int){
 func main() {
     // getPopularWishlists(1)
     getAppDetails(3788800)
+	getMembersList(3788800)
 }

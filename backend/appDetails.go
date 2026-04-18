@@ -140,6 +140,11 @@ func getAppDetails(appid int){
 			entry.Data.Type,
 			strings.Join(entry.Data.Developers, ", "),
 		)
+		if entry.Data.ReleaseDate.ComingSoon {
+			log.Printf("%s - not yet released (date: %s)", entry.Data.Name, entry.Data.ReleaseDate.Date)
+		} else {
+			log.Printf("%s - released on %s", entry.Data.Name, entry.Data.ReleaseDate.Date)
+		}
 	}
 	
 }
