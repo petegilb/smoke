@@ -1,23 +1,50 @@
 # smoke
 
-go backend in /backend
+A Steam wishlist analytics tool that tracks daily follower counts to identify trending games. Built as a learning project for Go and React.
 
-## postgresql db
+## What it does
 
-access db: psql -h localhost -U smoke -d smoke
+- Fetches game metadata from the Steam Store API
+- Tracks daily follower/member counts via the Steam Community feed
+- Stores snapshots in PostgreSQL to analyze trends over time
+- Plans to surface insights via a React frontend
 
-### migrations
+## Stack
 
-# 1. generate empty migration files
-migrate create -ext sql -dir migrations/ -seq create_games
+- **Backend**: Go
+- **Database**: PostgreSQL (via Docker)
+- **Frontend**: React (planned)
 
-# this creates:
-# migrations/000001_create_games.up.sql   (empty)
-# migrations/000001_create_games.down.sql (empty)
+## Setup
 
-# 2. write your SQL in those files
-# (edit 000001_create_games.up.sql with your CREATE TABLE)
-# (edit 000001_create_games.down.sql with your DROP TABLE)
+**1. Start the database**
+```bash
+docker compose up -d
+```
 
-# 3. run the migration
+**2. Configure environment**
+```bash
+cp example.env .env
+# edit .env with your Steam API credentials
+```
+
+**3. Run the backend**
+```bash
+cd backend
+go run .
+```
+
+Migrations run automatically on startup.
+
+## Database
+
+Access the DB directly:
+```bash
+psql -h localhost -U smoke -d smoke
+```
+
+Add a migration:
+```bash
+migrate create -ext sql -dir migrations/ -seq <name>
 migrate -path migrations/ -database "postgres://smoke:smoke@localhost:5432/smoke?sslmode=disable" up
+```
