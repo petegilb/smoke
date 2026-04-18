@@ -14,6 +14,7 @@ import (
 var appIDRegex = regexp.MustCompile(`/apps/(\d+)/`)
 
 var popularWishlistUrl = "https://store.steampowered.com/search/results/?filter=popularwishlist&json=1&count=500&page=%d"
+var defaultDB = "postgres://smoke:smoke@localhost:5432/smoke?sslmode=disable"
 
 type storeResponse struct {
     Desc string `json:"desc"`
@@ -60,6 +61,14 @@ func getPopularWishlists(page int){
 }
 
 func main() {
+	dbUrl := os.Getenv("DATABASE_URL")
+	if dbUrl == "" {
+		dbUrl = defaultDB
+	}
+
+	log.Println("Running Migrations...")
+	err := RunMigrations(dbUrl)
+	log.Printf("Migrations Output: %s", err)
     // getPopularWishlists(1)
     getAppDetails(3788800)
 	getMembersList(3788800)
