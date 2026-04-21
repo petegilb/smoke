@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/xml"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"encoding/xml"
+	"time"
 )
 
 type MemberListXML struct {
@@ -15,36 +15,45 @@ type MemberListXML struct {
 }
 
 type GroupDetails struct {
-	GroupName   string `xml:"groupName"`
-	GroupURL    string `xml:"groupURL"`
-	Headline    string `xml:"headline"`
-	Summary     string `xml:"summary"`
-	AvatarIcon  string `xml:"avatarIcon"`
+	GroupName    string `xml:"groupName"`
+	GroupURL     string `xml:"groupURL"`
+	Headline     string `xml:"headline"`
+	Summary      string `xml:"summary"`
+	AvatarIcon   string `xml:"avatarIcon"`
 	AvatarMedium string `xml:"avatarMedium"`
-	AvatarFull  string `xml:"avatarFull"`
-	MemberCount int    `xml:"memberCount"`
+	AvatarFull   string `xml:"avatarFull"`
+	MemberCount  int    `xml:"memberCount"`
 }
 
 var membersListUrl = "https://steamcommunity.com/games/%d/memberslistxml/?xml=1"
 
-func getMembersList(appid int){
+// getMembersList fetches a game's follower/member count from the Steam Community XML feed.
+// Retries up to 3 times with exponential backoff on failure (Steam Community rate limits aggressively).
+func getMembersList(appid int) (*GroupDetails, error) {
 	requestURL := fmt.Sprintf(membersListUrl, appid)
-    res, err := http.Get(requestURL)
-    if err != nil {
-        log.Printf("error making http request: %s\n", err)
-        os.Exit(1)
-    }
 
-    log.Printf("client: got response!\n")
-    log.Printf("client: status code: %d\n", res.StatusCode)
-    // log.Printf("Body: %s\n", resBody)
+	for attempt := range 3 {
+		if attempt > 0 {
+			backoff := time.Duration(attempt*attempt) * 5 * time.Second
+			log.Printf("  Retrying members list for %d in %s (attempt %d/3)", appid, backoff, attempt+1)
+			time.Sleep(backoff)
+		}
 
-	var data MemberListXML
-	if err := xml.NewDecoder(res.Body).Decode(&data); err != nil {
-		log.Fatal("failed to retrieve members list for %d", appid)
-        os.Exit(1)
+		res, err := http.Get(requestURL)
+		if err != nil {
+			return nil, fmt.Errorf("fetching members list for %d: %w", appid, err)
+		}
+
+		var data MemberListXML
+		err = xml.NewDecoder(res.Body).Decode(&data)
+		res.Body.Close()
+		if err != nil {
+			// EOF or decode errors are likely rate limiting — retry
+			continue
+		}
+
+		return &data.GroupDetails, nil
 	}
 
-	log.Printf("Game: %d, Followers: %d", data.GroupDetails.GroupName, data.GroupDetails.MemberCount)
-	
+	return nil, fmt.Errorf("members list for %d: failed after 3 attempts (likely rate limited)", appid)
 }

@@ -1,75 +1,82 @@
 package main
 
 import (
-    "fmt"
-    "log"
-    "net/http"
-    "os"
-    "io"
-    "encoding/json"
-    "regexp"
-    "strconv"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/robfig/cron/v3"
+	"github.com/rs/cors"
 )
 
-var appIDRegex = regexp.MustCompile(`/apps/(\d+)/`)
-
-var popularWishlistUrl = "https://store.steampowered.com/search/results/?filter=popularwishlist&json=1&count=500&page=%d"
 var defaultDB = "postgres://smoke:smoke@localhost:5432/smoke?sslmode=disable"
 
-type storeResponse struct {
-    Desc string `json:"desc"`
-	Items []struct {
-		Name string `json:"name"`
-		Logo string `json:"logo"`
-	} `json:"items"`
-}
-
-func getPopularWishlists(page int){
-    log.Println("Starting Steam store search...")
-
-    requestURL := fmt.Sprintf(popularWishlistUrl, page)
-    res, err := http.Get(requestURL)
-    if err != nil {
-        log.Printf("error making http request: %s\n", err)
-        os.Exit(1)
-    }
-
-    resBody, err := io.ReadAll(res.Body)
-    if err != nil {
-        log.Printf("client: could not read response body: %s\n", err)
-        os.Exit(1)
-    }
-
-    log.Printf("client: got response!\n")
-    log.Printf("client: status code: %d\n", res.StatusCode)
-
-    var payload storeResponse
-    err = json.Unmarshal(resBody, &payload)
-    if err != nil {
-        log.Fatal("Error during Unmarshal(): ", err)
-        os.Exit(1)
-    }
-
-    for i, game := range payload.Items {
-        // Check if we can grab the appid from the url using regex
-        m := appIDRegex.FindStringSubmatch(game.Logo)
-        if len(m) >= 2 {
-            appID, _ := strconv.Atoi(m[1])
-            log.Printf("#%d: %s (appid: %d)\n", i+1, game.Name, appID)
-        }
-    }
-}
-
 func main() {
-	dbUrl := os.Getenv("DATABASE_URL")
-	if dbUrl == "" {
-		dbUrl = defaultDB
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = defaultDB
 	}
 
-	log.Println("Running Migrations...")
-	err := RunMigrations(dbUrl)
-	log.Printf("Migrations Output: %s", err)
-    // getPopularWishlists(1)
-    getAppDetails(3788800)
-	getMembersList(3788800)
+	// Run migrations
+	log.Println("Running migrations...")
+	if err := RunMigrations(dbURL); err != nil {
+		log.Fatalf("Migration failed: %v", err)
+	}
+	log.Println("Migrations complete")
+
+	// Open DB connection pool
+	db, err := OpenDB(dbURL)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Check if we need to scrape immediately (>24 hours since last scrape)
+	lastScraped, err := GetLastScrapedAt(db)
+	if err != nil {
+		log.Printf("Warning: could not get last scraped time: %v", err)
+		lastScraped = time.Time{} // zero time triggers immediate scrape
+	}
+	if time.Since(lastScraped) > 24*time.Hour {
+		log.Printf("Last scrape was %s ago, starting immediate scrape...", time.Since(lastScraped).Round(time.Minute))
+		go func() {
+			if err := RunScrape(db); err != nil {
+				log.Printf("Immediate scrape error: %v", err)
+			}
+		}()
+	} else {
+		log.Printf("Last scrape was %s ago, skipping immediate scrape", time.Since(lastScraped).Round(time.Minute))
+	}
+
+	// Start cron scheduler — scrape daily at 6am UTC
+	c := cron.New()
+	c.AddFunc("0 6 * * *", func() {
+		log.Println("Cron: starting daily scrape")
+		if err := RunScrape(db); err != nil {
+			log.Printf("Cron: scrape error: %v", err)
+		}
+	})
+	c.Start()
+	defer c.Stop()
+	log.Println("Cron scheduler started (daily scrape at 6am UTC)")
+
+	// Set up routes
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/games", handleListGames(db))
+	mux.HandleFunc("GET /api/games/{appID}", handleGetGame(db))
+	mux.HandleFunc("GET /api/games/{appID}/snapshots", handleGetSnapshots(db))
+
+	// CORS middleware
+	handler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type"},
+		AllowCredentials: false,
+	}).Handler(mux)
+
+	log.Println("Server starting on :8080")
+	if err := http.ListenAndServe(":8080", handler); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
