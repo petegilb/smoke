@@ -55,5 +55,21 @@ func getMembersList(appid int) (*GroupDetails, error) {
 		return &data.GroupDetails, nil
 	}
 
-	return nil, fmt.Errorf("members list for %d: failed after 3 attempts (likely rate limited)", appid)
+	// Quick retries exhausted — wait 5 min for rate limit to reset and try once more
+	log.Printf("  Rate limited on app %d, waiting 5 minutes...", appid)
+	time.Sleep(5 * time.Minute)
+
+	res, err := http.Get(requestURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetching members list for %d: %w", appid, err)
+	}
+
+	var data MemberListXML
+	err = xml.NewDecoder(res.Body).Decode(&data)
+	res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("members list for %d: still failing after 5min wait: %w", appid, err)
+	}
+
+	return &data.GroupDetails, nil
 }
