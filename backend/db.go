@@ -24,6 +24,8 @@ type Game struct {
 	Publishers       []string  `db:"publishers" json:"publishers"`
 	HeaderImage      string    `db:"header_image" json:"header_image"`
 	ShortDescription string    `db:"short_description" json:"short_description"`
+	Genres           []string  `db:"genres" json:"genres"`
+	Categories       []string  `db:"categories" json:"categories"`
 	CreatedAt        time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt        time.Time `db:"updated_at" json:"updated_at"`
 }
@@ -70,8 +72,8 @@ func OpenDB(dbURL string) (*sql.DB, error) {
 // UpsertGame inserts a game or updates it if a game with the same app_id already exists.
 func UpsertGame(db *sql.DB, g Game) error {
 	_, err := db.Exec(`
-		INSERT INTO games (app_id, name, type, is_free, coming_soon, release_date, developers, publishers, header_image, short_description, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+		INSERT INTO games (app_id, name, type, is_free, coming_soon, release_date, developers, publishers, header_image, short_description, genres, categories, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
 		ON CONFLICT (app_id) DO UPDATE SET
 			name = EXCLUDED.name,
 			type = EXCLUDED.type,
@@ -82,9 +84,12 @@ func UpsertGame(db *sql.DB, g Game) error {
 			publishers = EXCLUDED.publishers,
 			header_image = EXCLUDED.header_image,
 			short_description = EXCLUDED.short_description,
+			genres = EXCLUDED.genres,
+			categories = EXCLUDED.categories,
 			updated_at = NOW()`,
 		g.AppID, g.Name, g.Type, g.IsFree, g.ComingSoon, g.ReleaseDate,
 		pq.Array(g.Developers), pq.Array(g.Publishers), g.HeaderImage, g.ShortDescription,
+		pq.Array(g.Genres), pq.Array(g.Categories),
 	)
 	return err
 }
@@ -109,7 +114,7 @@ func UpsertSnapshot(db *sql.DB, s DailySnapshot) error {
 func ListGames(db *sql.DB) ([]Game, error) {
 	rows, err := db.Query(`
 		SELECT app_id, name, type, is_free, coming_soon, release_date,
-			developers, publishers, header_image, short_description, created_at, updated_at
+			developers, publishers, header_image, short_description, genres, categories, created_at, updated_at
 		FROM games ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -122,6 +127,7 @@ func ListGames(db *sql.DB) ([]Game, error) {
 		err := rows.Scan(
 			&g.AppID, &g.Name, &g.Type, &g.IsFree, &g.ComingSoon, &g.ReleaseDate,
 			pq.Array(&g.Developers), pq.Array(&g.Publishers), &g.HeaderImage, &g.ShortDescription,
+			pq.Array(&g.Genres), pq.Array(&g.Categories),
 			&g.CreatedAt, &g.UpdatedAt,
 		)
 		if err != nil {
@@ -137,10 +143,11 @@ func GetGame(db *sql.DB, appID int) (*Game, error) {
 	var g Game
 	err := db.QueryRow(`
 		SELECT app_id, name, type, is_free, coming_soon, release_date,
-			developers, publishers, header_image, short_description, created_at, updated_at
+			developers, publishers, header_image, short_description, genres, categories, created_at, updated_at
 		FROM games WHERE app_id = $1`, appID).Scan(
 		&g.AppID, &g.Name, &g.Type, &g.IsFree, &g.ComingSoon, &g.ReleaseDate,
 		pq.Array(&g.Developers), pq.Array(&g.Publishers), &g.HeaderImage, &g.ShortDescription,
+		pq.Array(&g.Genres), pq.Array(&g.Categories),
 		&g.CreatedAt, &g.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {

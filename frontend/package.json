@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",
+    "@tanstack/react-virtual": "^3.13.24",
     "daisyui": "^5.5.19",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

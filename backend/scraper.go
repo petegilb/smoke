@@ -104,6 +104,15 @@ func RunScrape(db *sql.DB) error {
 			continue
 		}
 
+		genres := make([]string, 0, len(details.Genres))
+		for _, g := range details.Genres {
+			genres = append(genres, g.Description)
+		}
+		categories := make([]string, 0, len(details.Categories))
+		for _, c := range details.Categories {
+			categories = append(categories, c.Description)
+		}
+
 		game := Game{
 			AppID:            details.Steamappid,
 			Name:             details.Name,
@@ -115,6 +124,8 @@ func RunScrape(db *sql.DB) error {
 			Publishers:       details.Publishers,
 			HeaderImage:      details.HeaderImage,
 			ShortDescription: details.ShortDescription,
+			Genres:           genres,
+			Categories:       categories,
 		}
 		if err := UpsertGame(db, game); err != nil {
 			log.Printf("  Error upserting game %d: %v", appID, err)
