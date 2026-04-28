@@ -80,14 +80,37 @@ func collectAppIDs() ([]int, error) {
 
 // RunScrape fetches the popular wishlists (10 pages), then scrapes details and follower
 // counts for each game with a 1s delay between requests to avoid Steam rate limits.
+// After the popular list, it also refreshes any games already tracked in the DB that
+// have fallen off the popular pages, so their follower trends keep updating.
 func RunScrape(db *sql.DB) error {
 	log.Println("Starting scrape...")
 
-	appIDs, err := collectAppIDs()
+	popularIDs, err := collectAppIDs()
 	if err != nil {
 		return fmt.Errorf("collecting app IDs: %w", err)
 	}
-	log.Printf("Found %d total games to scrape", len(appIDs))
+
+	// Build the work list: popular IDs first (these get a wishlist_rank), followed
+	// by any DB-tracked games not on the popular pages (no rank).
+	popularSet := make(map[int]struct{}, len(popularIDs))
+	for _, id := range popularIDs {
+		popularSet[id] = struct{}{}
+	}
+
+	var stragglers []int
+	if existing, err := ListAllAppIDs(db); err != nil {
+		log.Printf("Warning: could not list existing app IDs: %v", err)
+	} else {
+		for _, id := range existing {
+			if _, onPopular := popularSet[id]; !onPopular {
+				stragglers = append(stragglers, id)
+			}
+		}
+	}
+
+	appIDs := append(append([]int{}, popularIDs...), stragglers...)
+	log.Printf("Scraping %d popular + %d previously-tracked games (%d total)",
+		len(popularIDs), len(stragglers), len(appIDs))
 
 	today := time.Now()
 	var errCount int
@@ -143,13 +166,21 @@ func RunScrape(db *sql.DB) error {
 			followerCount = members.MemberCount
 		}
 
-		// Upsert daily snapshot
-		wishlistRank := i + 1
+		// Upsert daily snapshot. Only games from the popular wishlist pages get a rank;
+		// stragglers (already-tracked games not currently in the top pages) get follower
+		// updates only.
 		snapshot := DailySnapshot{
 			AppID:         appID,
 			SnapshotDate:  today,
 			FollowerCount: &followerCount,
-			WishlistRank:  &wishlistRank,
+		}
+		var rankLabel string
+		if i < len(popularIDs) {
+			wishlistRank := i + 1
+			snapshot.WishlistRank = &wishlistRank
+			rankLabel = fmt.Sprintf("rank: %d", wishlistRank)
+		} else {
+			rankLabel = "rank: -"
 		}
 		if err := UpsertSnapshot(db, snapshot); err != nil {
 			log.Printf("  Error upserting snapshot for %d: %v", appID, err)
@@ -157,7 +188,7 @@ func RunScrape(db *sql.DB) error {
 			continue
 		}
 
-		log.Printf("  Done: %s (followers: %d, rank: %d)", details.Name, followerCount, wishlistRank)
+		log.Printf("  Done: %s (followers: %d, %s)", details.Name, followerCount, rankLabel)
 	}
 
 	// Record scrape completion time

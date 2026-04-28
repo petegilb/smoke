@@ -190,9 +190,13 @@ type GameListItem struct {
 	HeaderImage      string   `json:"header_image"`
 	Type             string   `json:"type"`
 	Genres           []string `json:"genres"`
+	Developers       []string `json:"developers"`
+	Publishers       []string `json:"publishers"`
+	ReleaseDate      string   `json:"release_date"`
+	ShortDescription string   `json:"short_description"`
 	CurrentFollowers int      `json:"current_followers"`
-	Delta24h         int      `json:"delta_24h"`
-	Delta7d          int      `json:"delta_7d"`
+	Delta24h         *int     `json:"delta_24h"`
+	Delta7d          *int     `json:"delta_7d"`
 	Sparkline        []int64  `json:"sparkline"`
 }
 
@@ -201,8 +205,14 @@ type GameListItem struct {
 // sorted by either current followers or 7-day delta.
 func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int) ([]GameListItem, error) {
 	orderBy := "current_followers DESC NULLS LAST"
-	if sort == "trending" {
+	switch sort {
+	case "trending":
 		orderBy = "delta_7d DESC NULLS LAST"
+	case "pct":
+		// Percentage growth over the last 7 days. NULLIF avoids divide-by-zero;
+		// references raw CTE columns because Postgres only resolves SELECT aliases
+		// as standalone names in ORDER BY, not inside expressions.
+		orderBy = "((l.follower_count - p7.follower_count)::float / NULLIF(p7.follower_count, 0)) DESC NULLS LAST"
 	}
 
 	query := `
@@ -212,18 +222,21 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 			WHERE follower_count IS NOT NULL
 			ORDER BY app_id, snapshot_date DESC
 		),
+		-- Only use snapshots within a tight window so deltas reflect the labeled
+		-- time range. Stale data (e.g. a 5-day-old snapshot) yields NULL rather
+		-- than a misleading "24h" change.
 		prev_24h AS (
 			SELECT DISTINCT ON (app_id) app_id, follower_count
 			FROM daily_snapshots
 			WHERE follower_count IS NOT NULL
-			  AND snapshot_date <= (CURRENT_DATE - INTERVAL '1 day')
+			  AND snapshot_date BETWEEN (CURRENT_DATE - INTERVAL '2 days') AND (CURRENT_DATE - INTERVAL '1 day')
 			ORDER BY app_id, snapshot_date DESC
 		),
 		prev_7d AS (
 			SELECT DISTINCT ON (app_id) app_id, follower_count
 			FROM daily_snapshots
 			WHERE follower_count IS NOT NULL
-			  AND snapshot_date <= (CURRENT_DATE - INTERVAL '7 days')
+			  AND snapshot_date BETWEEN (CURRENT_DATE - INTERVAL '8 days') AND (CURRENT_DATE - INTERVAL '6 days')
 			ORDER BY app_id, snapshot_date DESC
 		),
 		spark AS (
@@ -234,9 +247,10 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 			GROUP BY app_id
 		)
 		SELECT g.app_id, g.name, g.header_image, g.type, g.genres,
+			g.developers, g.publishers, g.release_date, g.short_description,
 			COALESCE(l.follower_count, 0) AS current_followers,
-			COALESCE(l.follower_count - p1.follower_count, 0) AS delta_24h,
-			COALESCE(l.follower_count - p7.follower_count, 0) AS delta_7d,
+			(l.follower_count - p1.follower_count) AS delta_24h,
+			(l.follower_count - p7.follower_count) AS delta_7d,
 			COALESCE(s.pts, '{}') AS sparkline
 		FROM games g
 		JOIN latest l ON g.app_id = l.app_id
@@ -260,6 +274,8 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 		err := rows.Scan(
 			&item.AppID, &item.Name, &item.HeaderImage, &item.Type,
 			pq.Array(&item.Genres),
+			pq.Array(&item.Developers), pq.Array(&item.Publishers),
+			&item.ReleaseDate, &item.ShortDescription,
 			&item.CurrentFollowers, &item.Delta24h, &item.Delta7d,
 			pq.Array(&item.Sparkline),
 		)
@@ -269,6 +285,26 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+// ListAllAppIDs returns every app_id currently tracked in the games table.
+// Used by the scraper to refresh games that have fallen out of the top wishlist pages.
+func ListAllAppIDs(db *sql.DB) ([]int, error) {
+	rows, err := db.Query(`SELECT app_id FROM games`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // GetLastScrapedAt returns the time of the last completed scrape.

@@ -86,7 +86,7 @@ func handleGameList(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		sort := q.Get("sort")
-		if sort != "trending" {
+		if sort != "trending" && sort != "pct" {
 			sort = "followers"
 		}
 		gameType := q.Get("type")
