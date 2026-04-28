@@ -30,11 +30,12 @@ func requestLogger(next http.Handler) http.Handler {
 	})
 }
 
-// serverError logs the underlying error context and returns a 500 to the client.
-// Use this from handlers so the request log line is accompanied by an error detail line.
+// serverError logs the underlying error context and returns a generic 500 to the client.
+// The error detail stays in the log; the response intentionally hides driver/schema details
+// so internal mistakes don't leak to callers.
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("error %s %s: %v", r.Method, r.URL.Path, err)
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	http.Error(w, "internal server error", http.StatusInternalServerError)
 }
 
 // handleListGames returns all tracked games ordered by name.

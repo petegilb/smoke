@@ -3,13 +3,37 @@ services:
     image: postgres:17
     container_name: smoke-db
     environment:
-      POSTGRES_USER: smoke
-      POSTGRES_PASSWORD: smoke
-      POSTGRES_DB: smoke
+      POSTGRES_USER: ${POSTGRES_USER:-smoke}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-smoke}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smoke -d smoke"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: smoke-backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-smoke}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-smoke}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: smoke-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:
