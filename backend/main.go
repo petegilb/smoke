@@ -69,13 +69,14 @@ func main() {
 	mux.HandleFunc("GET /api/games/{appID}/snapshots", handleGetSnapshots(db))
 	mux.HandleFunc("GET /api/meta", handleMeta(db))
 
-	// CORS middleware
-	handler := cors.New(cors.Options{
+	// CORS + request logging middleware
+	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: false,
 	}).Handler(mux)
+	handler := requestLogger(corsHandler)
 
 	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", handler); err != nil {

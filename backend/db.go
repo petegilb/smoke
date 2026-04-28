@@ -193,7 +193,7 @@ type GameListItem struct {
 	CurrentFollowers int      `json:"current_followers"`
 	Delta24h         int      `json:"delta_24h"`
 	Delta7d          int      `json:"delta_7d"`
-	Sparkline        []int    `json:"sparkline"`
+	Sparkline        []int64  `json:"sparkline"`
 }
 
 // ListGameItems returns the dashboard list with current followers, 24h/7d deltas,

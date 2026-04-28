@@ -27,8 +27,27 @@ type GroupDetails struct {
 
 var membersListUrl = "https://steamcommunity.com/games/%d/memberslistxml/?xml=1"
 
+const longBackoffAttempts = 5
+const longBackoffDuration = 5 * time.Minute
+
+// fetchMembersList does a single HTTP GET + XML decode of the members list feed.
+func fetchMembersList(requestURL string) (*GroupDetails, error) {
+	res, err := http.Get(requestURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetching members list: %w", err)
+	}
+	defer res.Body.Close()
+
+	var data MemberListXML
+	if err := xml.NewDecoder(res.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+	return &data.GroupDetails, nil
+}
+
 // getMembersList fetches a game's follower/member count from the Steam Community XML feed.
-// Retries up to 3 times with exponential backoff on failure (Steam Community rate limits aggressively).
+// First does 3 quick retries with exponential backoff, then up to 5 longer 5-minute waits
+// for the rate limit to reset.
 func getMembersList(appid int) (*GroupDetails, error) {
 	requestURL := fmt.Sprintf(membersListUrl, appid)
 
@@ -39,37 +58,22 @@ func getMembersList(appid int) (*GroupDetails, error) {
 			time.Sleep(backoff)
 		}
 
-		res, err := http.Get(requestURL)
-		if err != nil {
-			return nil, fmt.Errorf("fetching members list for %d: %w", appid, err)
+		details, err := fetchMembersList(requestURL)
+		if err == nil {
+			return details, nil
 		}
+	}
 
-		var data MemberListXML
-		err = xml.NewDecoder(res.Body).Decode(&data)
-		res.Body.Close()
-		if err != nil {
-			// EOF or decode errors are likely rate limiting — retry
-			continue
+	// Quick retries exhausted — wait 5 min for rate limit to reset, up to 5 times
+	for attempt := range longBackoffAttempts {
+		log.Printf("  Rate limited on app %d, waiting 5 minutes (attempt %d/%d)...", appid, attempt+1, longBackoffAttempts)
+		time.Sleep(longBackoffDuration)
+
+		details, err := fetchMembersList(requestURL)
+		if err == nil {
+			return details, nil
 		}
-
-		return &data.GroupDetails, nil
 	}
 
-	// Quick retries exhausted — wait 5 min for rate limit to reset and try once more
-	log.Printf("  Rate limited on app %d, waiting 5 minutes...", appid)
-	time.Sleep(5 * time.Minute)
-
-	res, err := http.Get(requestURL)
-	if err != nil {
-		return nil, fmt.Errorf("fetching members list for %d: %w", appid, err)
-	}
-
-	var data MemberListXML
-	err = xml.NewDecoder(res.Body).Decode(&data)
-	res.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("members list for %d: still failing after 5min wait: %w", appid, err)
-	}
-
-	return &data.GroupDetails, nil
+	return nil, fmt.Errorf("members list for %d: still failing after %d×5min waits", appid, longBackoffAttempts)
 }

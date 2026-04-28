@@ -19,7 +19,7 @@ type AppDetails struct {
 	Type               string             `json:"type"`
 	Name               string             `json:"name"`
 	Steamappid         int                `json:"steam_appid"`
-	RequiredAge        int                `json:"required_age"`
+	RequiredAge        json.RawMessage    `json:"required_age"`
 	IsFree             bool               `json:"is_free"`
 	ControllerSupport  string             `json:"controller_support"`
 	ShortDescription   string             `json:"short_description"`

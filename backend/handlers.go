@@ -3,10 +3,39 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
 )
+
+// statusRecorder wraps http.ResponseWriter to capture the response status code for logging.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// requestLogger logs every HTTP request with method, path, status, and duration.
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		log.Printf("%d %s %s (%s)", rec.status, r.Method, r.URL.RequestURI(), time.Since(start).Round(time.Microsecond))
+	})
+}
+
+// serverError logs the underlying error context and returns a 500 to the client.
+// Use this from handlers so the request log line is accompanied by an error detail line.
+func serverError(w http.ResponseWriter, r *http.Request, err error) {
+	log.Printf("error %s %s: %v", r.Method, r.URL.Path, err)
+	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
 
 // handleListGames returns all tracked games ordered by name.
 // GET /api/games
@@ -14,7 +43,7 @@ func handleListGames(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		games, err := ListGames(db)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 		if games == nil {
@@ -38,7 +67,7 @@ func handleGetGame(db *sql.DB) http.HandlerFunc {
 
 		game, err := GetGame(db, appID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 		if game == nil {
@@ -72,7 +101,7 @@ func handleGameList(db *sql.DB) http.HandlerFunc {
 
 		items, err := ListGameItems(db, sort, gameType, indie, limit)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -86,7 +115,7 @@ func handleMeta(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		last, err := GetLastScrapedAt(db)
 		if err != nil && err != sql.ErrNoRows {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 
@@ -118,7 +147,7 @@ func handleGetSnapshots(db *sql.DB) http.HandlerFunc {
 
 		snapshots, err := GetSnapshots(db, appID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 		if snapshots == nil {
