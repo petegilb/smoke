@@ -195,6 +195,7 @@ type GameListItem struct {
 	ReleaseDate      string   `json:"release_date"`
 	ShortDescription string   `json:"short_description"`
 	CurrentFollowers int      `json:"current_followers"`
+	WishlistRank     *int     `json:"wishlist_rank"`
 	Delta24h         *int     `json:"delta_24h"`
 	Delta7d          *int     `json:"delta_7d"`
 	Sparkline        []int64  `json:"sparkline"`
@@ -217,7 +218,7 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 
 	query := `
 		WITH latest AS (
-			SELECT DISTINCT ON (app_id) app_id, follower_count
+			SELECT DISTINCT ON (app_id) app_id, follower_count, wishlist_rank
 			FROM daily_snapshots
 			WHERE follower_count IS NOT NULL
 			ORDER BY app_id, snapshot_date DESC
@@ -249,6 +250,7 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 		SELECT g.app_id, g.name, g.header_image, g.type, g.genres,
 			g.developers, g.publishers, g.release_date, g.short_description,
 			COALESCE(l.follower_count, 0) AS current_followers,
+			l.wishlist_rank,
 			(l.follower_count - p1.follower_count) AS delta_24h,
 			(l.follower_count - p7.follower_count) AS delta_7d,
 			COALESCE(s.pts, '{}') AS sparkline
@@ -276,7 +278,7 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 			pq.Array(&item.Genres),
 			pq.Array(&item.Developers), pq.Array(&item.Publishers),
 			&item.ReleaseDate, &item.ShortDescription,
-			&item.CurrentFollowers, &item.Delta24h, &item.Delta7d,
+			&item.CurrentFollowers, &item.WishlistRank, &item.Delta24h, &item.Delta7d,
 			pq.Array(&item.Sparkline),
 		)
 		if err != nil {

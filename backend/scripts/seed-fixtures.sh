@@ -39,19 +39,35 @@ ON CONFLICT (app_id) DO UPDATE SET
     publishers = EXCLUDED.publishers,
     updated_at = NOW();
 
--- 30 days of snapshots per game, follower counts following a per-game baseline + trend + noise.
--- Some games are made to grow fast (high trend) so the Trending tab has visible movers.
+-- 30 days of snapshots per game. Combines a per-game baseline with a mild linear
+-- trend plus two sinusoidal waves and an occasional drop event so that sparklines
+-- show real dips instead of straight lines.
 INSERT INTO daily_snapshots (app_id, snapshot_date, follower_count, wishlist_rank)
 SELECT
     9000000 + i,
     (CURRENT_DATE - d * INTERVAL '1 day')::date,
-    GREATEST(0,
+    GREATEST(100,
         -- baseline scales with i so top games have ~500k followers
         (1000 + (i * 47) % 500000)
-        -- 30-day linear trend; every 7th game is a fast riser
-        + ((30 - d) * (CASE WHEN i % 7 = 0 THEN 800 ELSE 50 + (i % 200) END))
-        -- pseudo-random noise per (game, day)
-        + (((i * 31 + d * 17) % 600) - 300)
+        -- linear trend; every 7th game is a fast riser, every 11th is a faller
+        + ((30 - d) * (CASE
+            WHEN i % 7 = 0 THEN 600
+            WHEN i % 11 = 0 THEN -300
+            ELSE 30 + (i % 150)
+          END))
+        -- primary swing: amplitude is 8% of baseline, period 4–14 days per game
+        + ((1000 + (i * 47) % 500000) * 0.08
+            * sin(2 * pi() * d / (4 + (i % 11)) + (i % 17)))::int
+        -- secondary higher-frequency wobble
+        + ((1000 + (i * 47) % 500000) * 0.03
+            * sin(2 * pi() * d / 3 + (i * 0.7)))::int
+        -- occasional drop events (controversy, delay, etc.)
+        + CASE WHEN ((i * 5 + d * 13) % 23) = 0
+               THEN -((1000 + (i * 47) % 500000) * 0.06)::int
+               ELSE 0
+          END
+        -- broader pseudo-random noise per (game, day)
+        + (((i * 31 + d * 17) % 1400) - 700)
     )::int,
     (i + 1)
 FROM generate_series(0, 999) AS i
