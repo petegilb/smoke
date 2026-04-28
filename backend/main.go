@@ -64,8 +64,10 @@ func main() {
 	// Set up routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/games", handleListGames(db))
+	mux.HandleFunc("GET /api/games/list", handleGameList(db))
 	mux.HandleFunc("GET /api/games/{appID}", handleGetGame(db))
 	mux.HandleFunc("GET /api/games/{appID}/snapshots", handleGetSnapshots(db))
+	mux.HandleFunc("GET /api/meta", handleMeta(db))
 
 	// CORS middleware
 	handler := cors.New(cors.Options{

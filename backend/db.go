@@ -183,6 +183,94 @@ func GetSnapshots(db *sql.DB, appID int) ([]DailySnapshot, error) {
 	return snapshots, rows.Err()
 }
 
+// GameListItem is a denormalized row for the dashboard list endpoint.
+type GameListItem struct {
+	AppID            int      `json:"app_id"`
+	Name             string   `json:"name"`
+	HeaderImage      string   `json:"header_image"`
+	Type             string   `json:"type"`
+	Genres           []string `json:"genres"`
+	CurrentFollowers int      `json:"current_followers"`
+	Delta24h         int      `json:"delta_24h"`
+	Delta7d          int      `json:"delta_7d"`
+	Sparkline        []int    `json:"sparkline"`
+}
+
+// ListGameItems returns the dashboard list with current followers, 24h/7d deltas,
+// and a 30-day follower-count sparkline per game. Filters by type and indie genre,
+// sorted by either current followers or 7-day delta.
+func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int) ([]GameListItem, error) {
+	orderBy := "current_followers DESC NULLS LAST"
+	if sort == "trending" {
+		orderBy = "delta_7d DESC NULLS LAST"
+	}
+
+	query := `
+		WITH latest AS (
+			SELECT DISTINCT ON (app_id) app_id, follower_count
+			FROM daily_snapshots
+			WHERE follower_count IS NOT NULL
+			ORDER BY app_id, snapshot_date DESC
+		),
+		prev_24h AS (
+			SELECT DISTINCT ON (app_id) app_id, follower_count
+			FROM daily_snapshots
+			WHERE follower_count IS NOT NULL
+			  AND snapshot_date <= (CURRENT_DATE - INTERVAL '1 day')
+			ORDER BY app_id, snapshot_date DESC
+		),
+		prev_7d AS (
+			SELECT DISTINCT ON (app_id) app_id, follower_count
+			FROM daily_snapshots
+			WHERE follower_count IS NOT NULL
+			  AND snapshot_date <= (CURRENT_DATE - INTERVAL '7 days')
+			ORDER BY app_id, snapshot_date DESC
+		),
+		spark AS (
+			SELECT app_id, array_agg(follower_count ORDER BY snapshot_date) AS pts
+			FROM daily_snapshots
+			WHERE follower_count IS NOT NULL
+			  AND snapshot_date >= (CURRENT_DATE - INTERVAL '30 days')
+			GROUP BY app_id
+		)
+		SELECT g.app_id, g.name, g.header_image, g.type, g.genres,
+			COALESCE(l.follower_count, 0) AS current_followers,
+			COALESCE(l.follower_count - p1.follower_count, 0) AS delta_24h,
+			COALESCE(l.follower_count - p7.follower_count, 0) AS delta_7d,
+			COALESCE(s.pts, '{}') AS sparkline
+		FROM games g
+		JOIN latest l ON g.app_id = l.app_id
+		LEFT JOIN prev_24h p1 ON g.app_id = p1.app_id
+		LEFT JOIN prev_7d p7 ON g.app_id = p7.app_id
+		LEFT JOIN spark s ON g.app_id = s.app_id
+		WHERE ($1 = '' OR g.type = $1)
+		  AND (NOT $2 OR 'Indie' = ANY(g.genres))
+		ORDER BY ` + orderBy + `
+		LIMIT $3`
+
+	rows, err := db.Query(query, gameType, indieOnly, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []GameListItem{}
+	for rows.Next() {
+		var item GameListItem
+		err := rows.Scan(
+			&item.AppID, &item.Name, &item.HeaderImage, &item.Type,
+			pq.Array(&item.Genres),
+			&item.CurrentFollowers, &item.Delta24h, &item.Delta7d,
+			pq.Array(&item.Sparkline),
+		)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 // GetLastScrapedAt returns the time of the last completed scrape.
 func GetLastScrapedAt(db *sql.DB) (time.Time, error) {
 	var val string
