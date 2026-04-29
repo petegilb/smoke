@@ -209,6 +209,8 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 	// displayed #N matches the row order (lower rank = more wishlisted).
 	orderBy := "l.wishlist_rank ASC NULLS LAST"
 	switch sort {
+	case "gain_24h":
+		orderBy = "delta_24h DESC NULLS LAST"
 	case "trending":
 		orderBy = "delta_7d DESC NULLS LAST"
 	case "pct":

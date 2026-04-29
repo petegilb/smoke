@@ -75,6 +75,16 @@ docker exec -i smoke-db pg_restore -U smoke -d smoke --clean < backups/<filename
 
 Migrations run automatically on backend startup.
 
+### Force a rescrape
+
+The backend only runs an immediate scrape on startup if the last successful scrape was more than 24 hours ago. To force one (e.g. after a code update), backdate the scrape metadata and restart:
+
+```bash
+docker exec smoke-db psql -U smoke -d smoke -c \
+  "UPDATE scrape_metadata SET value = '2000-01-01T00:00:00Z' WHERE key = 'last_scraped_at';"
+docker compose restart backend
+```
+
 ## Project layout
 
 ```

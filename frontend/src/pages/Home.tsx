@@ -10,7 +10,10 @@ function Home() {
   const [params, setParams] = useSearchParams()
   const sortParam = params.get('sort')
   const sort: SortMode =
-    sortParam === 'trending' ? 'trending' : sortParam === 'pct' ? 'pct' : 'followers'
+    sortParam === 'trending' ? 'trending'
+    : sortParam === 'pct' ? 'pct'
+    : sortParam === 'gain_24h' ? 'gain_24h'
+    : 'followers'
   const type = params.get('type') ?? ''
   const indie = params.get('indie') === 'true'
 
@@ -56,8 +59,17 @@ function Home() {
           </button>
           <button
             role="tab"
+            className={`tab ${sort === 'gain_24h' ? 'tab-active' : ''}`}
+            onClick={() => updateParam('sort', 'gain_24h')}
+            title="Biggest follower gains in the last 24 hours"
+          >
+            Last 24h
+          </button>
+          <button
+            role="tab"
             className={`tab ${sort === 'trending' ? 'tab-active' : ''}`}
             onClick={() => updateParam('sort', 'trending')}
+            title="Biggest follower gains in the last 7 days"
           >
             Trending
           </button>

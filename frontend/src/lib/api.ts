@@ -20,7 +20,7 @@ export type Meta = {
   next_scrape_at: string
 }
 
-export type SortMode = 'followers' | 'trending' | 'pct'
+export type SortMode = 'followers' | 'trending' | 'pct' | 'gain_24h'
 
 export type ListParams = {
   sort: SortMode
