@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
 )
+
+// errNoGroup means the app has no Steam Community group. This is permanent —
+// retrying won't help, so callers should give up immediately.
+var errNoGroup = errors.New("no community group exists for this app")
 
 type MemberListXML struct {
 	XMLName      xml.Name     `xml:"memberList"`
@@ -34,6 +41,8 @@ var membersListUrl = "https://steamcommunity.com/games/%d/memberslistxml/?xml=1"
 var longBackoffMinutes = []int{5, 10, 15, 20, 30}
 
 // fetchMembersList does a single HTTP GET + XML decode of the members list feed.
+// Returns errNoGroup when Steam responds with the "no group exists" HTML page,
+// so callers can skip the retry budget for apps that will never succeed.
 func fetchMembersList(requestURL string) (*GroupDetails, error) {
 	res, err := http.Get(requestURL)
 	if err != nil {
@@ -41,8 +50,17 @@ func fetchMembersList(requestURL string) (*GroupDetails, error) {
 	}
 	defer res.Body.Close()
 
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading members list body: %w", err)
+	}
+
+	if bytes.Contains(body, []byte("No group could be retrieved for the given URL")) {
+		return nil, errNoGroup
+	}
+
 	var data MemberListXML
-	if err := xml.NewDecoder(res.Body).Decode(&data); err != nil {
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&data); err != nil {
 		return nil, err
 	}
 	return &data.GroupDetails, nil
@@ -65,6 +83,9 @@ func getMembersList(appid int) (*GroupDetails, error) {
 		if err == nil {
 			return details, nil
 		}
+		if errors.Is(err, errNoGroup) {
+			return nil, err
+		}
 		log.Printf("  fetch failed for %d (attempt %d/3): %v", appid, attempt+1, err)
 	}
 
@@ -77,6 +98,9 @@ func getMembersList(appid int) (*GroupDetails, error) {
 		details, err := fetchMembersList(requestURL)
 		if err == nil {
 			return details, nil
+		}
+		if errors.Is(err, errNoGroup) {
+			return nil, err
 		}
 		log.Printf("  fetch failed for %d (long-backoff attempt %d/%d): %v", appid, i+1, len(longBackoffMinutes), err)
 	}
