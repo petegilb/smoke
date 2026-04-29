@@ -45,12 +45,6 @@ function Home() {
     <div className="container mx-auto px-4 max-w-6xl">
       <GameOfDay />
 
-      <div role="alert" className="alert alert-info alert-soft mb-4">
-        <span className="text-sm">
-          Wishlist rankings are approximated using Steam Community follower counts as a proxy.
-        </span>
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
         <div role="tablist" className="tabs tabs-boxed">
           <button

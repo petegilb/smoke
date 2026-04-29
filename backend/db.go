@@ -205,7 +205,9 @@ type GameListItem struct {
 // and a 30-day follower-count sparkline per game. Filters by type and indie genre,
 // sorted by either current followers or 7-day delta.
 func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int) ([]GameListItem, error) {
-	orderBy := "current_followers DESC NULLS LAST"
+	// Default = Top Wishlisted, sorted by Steam's own wishlist rank so the
+	// displayed #N matches the row order (lower rank = more wishlisted).
+	orderBy := "l.wishlist_rank ASC NULLS LAST"
 	switch sort {
 	case "trending":
 		orderBy = "delta_7d DESC NULLS LAST"

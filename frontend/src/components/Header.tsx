@@ -11,7 +11,7 @@ function Header() {
         </Link>
       </div>
       <div className="flex-none text-right text-xs text-base-content/70 max-w-xs hidden sm:block pr-2">
-        Tracking Steam follower counts as a wishlist proxy.
+        Tracking Steam follower counts to try to see wishlist changes.
       </div>
     </div>
   )

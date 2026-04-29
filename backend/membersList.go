@@ -27,8 +27,11 @@ type GroupDetails struct {
 
 var membersListUrl = "https://steamcommunity.com/games/%d/memberslistxml/?xml=1"
 
-const longBackoffAttempts = 5
-const longBackoffDuration = 5 * time.Minute
+// longBackoffMinutes are the per-attempt wait times (in minutes) after the
+// quick-retry budget is exhausted. Each entry is a fresh attempt that waits
+// the listed duration first, giving Steam's rate limit progressively more
+// time to reset before giving up.
+var longBackoffMinutes = []int{5, 10, 15, 20, 30}
 
 // fetchMembersList does a single HTTP GET + XML decode of the members list feed.
 func fetchMembersList(requestURL string) (*GroupDetails, error) {
@@ -46,8 +49,8 @@ func fetchMembersList(requestURL string) (*GroupDetails, error) {
 }
 
 // getMembersList fetches a game's follower/member count from the Steam Community XML feed.
-// First does 3 quick retries with exponential backoff, then up to 5 longer 5-minute waits
-// for the rate limit to reset.
+// First does 3 quick retries with exponential backoff, then waits progressively longer
+// (5, 10, 15, 20, 30 minutes) for the rate limit to reset.
 func getMembersList(appid int) (*GroupDetails, error) {
 	requestURL := fmt.Sprintf(membersListUrl, appid)
 
@@ -62,18 +65,21 @@ func getMembersList(appid int) (*GroupDetails, error) {
 		if err == nil {
 			return details, nil
 		}
+		log.Printf("  fetch failed for %d (attempt %d/3): %v", appid, attempt+1, err)
 	}
 
-	// Quick retries exhausted — wait 5 min for rate limit to reset, up to 5 times
-	for attempt := range longBackoffAttempts {
-		log.Printf("  Rate limited on app %d, waiting 5 minutes (attempt %d/%d)...", appid, attempt+1, longBackoffAttempts)
-		time.Sleep(longBackoffDuration)
+	// Quick retries exhausted — wait increasingly longer for the rate limit to reset.
+	for i, minutes := range longBackoffMinutes {
+		wait := time.Duration(minutes) * time.Minute
+		log.Printf("  Rate limited on app %d, waiting %d minutes (attempt %d/%d)...", appid, minutes, i+1, len(longBackoffMinutes))
+		time.Sleep(wait)
 
 		details, err := fetchMembersList(requestURL)
 		if err == nil {
 			return details, nil
 		}
+		log.Printf("  fetch failed for %d (long-backoff attempt %d/%d): %v", appid, i+1, len(longBackoffMinutes), err)
 	}
 
-	return nil, fmt.Errorf("members list for %d: still failing after %d×5min waits", appid, longBackoffAttempts)
+	return nil, fmt.Errorf("members list for %d: still failing after long backoff waits %v", appid, longBackoffMinutes)
 }
