@@ -82,7 +82,7 @@ func handleGetGame(db *sql.DB) http.HandlerFunc {
 }
 
 // handleGameList returns the dashboard list with deltas and sparklines.
-// GET /api/games/list?sort=followers|trending&type=game&indie=true&limit=200
+// GET /api/games/list?sort=followers|trending&type=game&indie=true&limit=500
 func handleGameList(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -93,7 +93,7 @@ func handleGameList(db *sql.DB) http.HandlerFunc {
 		gameType := q.Get("type")
 		indie := q.Get("indie") == "true"
 
-		limit := 200
+		limit := 500
 		if v := q.Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
 				limit = n

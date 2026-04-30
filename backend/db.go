@@ -222,27 +222,30 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 
 	query := `
 		WITH latest AS (
-			SELECT DISTINCT ON (app_id) app_id, follower_count, wishlist_rank
+			SELECT DISTINCT ON (app_id) app_id, follower_count, wishlist_rank, snapshot_date
 			FROM daily_snapshots
 			WHERE follower_count IS NOT NULL
 			ORDER BY app_id, snapshot_date DESC
 		),
-		-- Only use snapshots within a tight window so deltas reflect the labeled
-		-- time range. Stale data (e.g. a 5-day-old snapshot) yields NULL rather
-		-- than a misleading "24h" change.
+		-- Anchor delta windows on each game's own latest snapshot rather than
+		-- CURRENT_DATE. Otherwise, when today's scrape hasn't run yet, "latest"
+		-- falls inside the calendar window and the CTE matches the same row,
+		-- producing a misleading delta of 0.
 		prev_24h AS (
-			SELECT DISTINCT ON (app_id) app_id, follower_count
-			FROM daily_snapshots
-			WHERE follower_count IS NOT NULL
-			  AND snapshot_date BETWEEN (CURRENT_DATE - INTERVAL '2 days') AND (CURRENT_DATE - INTERVAL '1 day')
-			ORDER BY app_id, snapshot_date DESC
+			SELECT DISTINCT ON (s.app_id) s.app_id, s.follower_count
+			FROM daily_snapshots s
+			JOIN latest l ON s.app_id = l.app_id
+			WHERE s.follower_count IS NOT NULL
+			  AND s.snapshot_date BETWEEN (l.snapshot_date - INTERVAL '2 days') AND (l.snapshot_date - INTERVAL '1 day')
+			ORDER BY s.app_id, s.snapshot_date DESC
 		),
 		prev_7d AS (
-			SELECT DISTINCT ON (app_id) app_id, follower_count
-			FROM daily_snapshots
-			WHERE follower_count IS NOT NULL
-			  AND snapshot_date BETWEEN (CURRENT_DATE - INTERVAL '8 days') AND (CURRENT_DATE - INTERVAL '6 days')
-			ORDER BY app_id, snapshot_date DESC
+			SELECT DISTINCT ON (s.app_id) s.app_id, s.follower_count
+			FROM daily_snapshots s
+			JOIN latest l ON s.app_id = l.app_id
+			WHERE s.follower_count IS NOT NULL
+			  AND s.snapshot_date BETWEEN (l.snapshot_date - INTERVAL '8 days') AND (l.snapshot_date - INTERVAL '6 days')
+			ORDER BY s.app_id, s.snapshot_date DESC
 		),
 		spark AS (
 			SELECT app_id, array_agg(follower_count ORDER BY snapshot_date) AS pts
