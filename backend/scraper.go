@@ -9,8 +9,18 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
+
+// scrapeInProgress is set while RunScrape is executing so the /api/meta endpoint
+// can surface live status to the dashboard.
+var scrapeInProgress atomic.Bool
+
+// IsScrapeInProgress reports whether a scrape is currently running.
+func IsScrapeInProgress() bool {
+	return scrapeInProgress.Load()
+}
 
 var appIDRegex = regexp.MustCompile(`/apps/(\d+)/`)
 var popularWishlistUrl = "https://store.steampowered.com/search/results/?filter=popularwishlist&json=1&count=500&page=%d"
@@ -83,6 +93,12 @@ func collectAppIDs() ([]int, error) {
 // After the popular list, it also refreshes any games already tracked in the DB that
 // have fallen off the popular pages, so their follower trends keep updating.
 func RunScrape(db *sql.DB) error {
+	if !scrapeInProgress.CompareAndSwap(false, true) {
+		log.Println("Scrape already in progress, skipping")
+		return nil
+	}
+	defer scrapeInProgress.Store(false)
+
 	log.Println("Starting scrape...")
 
 	popularIDs, err := collectAppIDs()

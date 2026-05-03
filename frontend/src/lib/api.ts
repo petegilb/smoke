@@ -18,6 +18,7 @@ export type GameListItem = {
 export type Meta = {
   last_scraped_at: string
   next_scrape_at: string
+  scrape_in_progress: boolean
 }
 
 export type SortMode = 'followers' | 'trending' | 'pct' | 'gain_24h'

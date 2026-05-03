@@ -128,8 +128,9 @@ func handleMeta(db *sql.DB) http.HandlerFunc {
 		}
 
 		resp := map[string]any{
-			"last_scraped_at": last,
-			"next_scrape_at":  next,
+			"last_scraped_at":     last,
+			"next_scrape_at":      next,
+			"scrape_in_progress":  IsScrapeInProgress(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)

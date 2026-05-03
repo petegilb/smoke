@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchMeta } from '../lib/api'
+import { fetchMeta, type Meta } from '../lib/api'
 
 function format(ms: number): { h: number; m: number; s: number } {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -11,13 +11,15 @@ function format(ms: number): { h: number; m: number; s: number } {
 }
 
 function RefreshCountdown() {
-  const [nextAt, setNextAt] = useState<Date | null>(null)
+  const [meta, setMeta] = useState<Meta | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
+    let cancelled = false
     fetchMeta()
-      .then(m => setNextAt(new Date(m.next_scrape_at)))
-      .catch(() => setNextAt(null))
+      .then(m => { if (!cancelled) setMeta(m) })
+      .catch(() => { if (!cancelled) setMeta(null) })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -25,9 +27,18 @@ function RefreshCountdown() {
     return () => clearInterval(id)
   }, [])
 
-  if (!nextAt) return null
+  if (!meta) return null
 
-  const { h, m, s } = format(nextAt.getTime() - now)
+  if (meta.scrape_in_progress) {
+    return (
+      <div className="text-sm text-base-content/70 flex items-center gap-2">
+        <span className="loading loading-ring loading-xs" />
+        <span>DB Refresh in Progress...</span>
+      </div>
+    )
+  }
+
+  const { h, m, s } = format(new Date(meta.next_scrape_at).getTime() - now)
 
   return (
     <div className="text-sm text-base-content/70 flex items-center gap-2">
