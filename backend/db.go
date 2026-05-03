@@ -204,7 +204,7 @@ type GameListItem struct {
 // ListGameItems returns the dashboard list with current followers, 24h/7d deltas,
 // and a 30-day follower-count sparkline per game. Filters by type and indie genre,
 // sorted by either current followers or 7-day delta.
-func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int) ([]GameListItem, error) {
+func ListGameItems(db *sql.DB, sort, gameType string, indieOnly, includeReleased bool, limit int) ([]GameListItem, error) {
 	// Default = Top Wishlisted, sorted by Steam's own wishlist rank so the
 	// displayed #N matches the row order (lower rank = more wishlisted).
 	orderBy := "l.wishlist_rank ASC NULLS LAST"
@@ -268,10 +268,11 @@ func ListGameItems(db *sql.DB, sort, gameType string, indieOnly bool, limit int)
 		LEFT JOIN spark s ON g.app_id = s.app_id
 		WHERE ($1 = '' OR g.type = $1)
 		  AND (NOT $2 OR 'Indie' = ANY(g.genres))
+		  AND ($3 OR g.coming_soon = TRUE)
 		ORDER BY ` + orderBy + `
-		LIMIT $3`
+		LIMIT $4`
 
-	rows, err := db.Query(query, gameType, indieOnly, limit)
+	rows, err := db.Query(query, gameType, indieOnly, includeReleased, limit)
 	if err != nil {
 		return nil, err
 	}

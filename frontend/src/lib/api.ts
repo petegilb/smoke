@@ -26,6 +26,7 @@ export type ListParams = {
   sort: SortMode
   type?: string
   indie?: boolean
+  includeReleased?: boolean
   limit?: number
 }
 
@@ -33,6 +34,7 @@ export async function fetchGameList(params: ListParams): Promise<GameListItem[]>
   const q = new URLSearchParams({ sort: params.sort })
   if (params.type) q.set('type', params.type)
   if (params.indie) q.set('indie', 'true')
+  if (params.includeReleased) q.set('include_released', 'true')
   if (params.limit) q.set('limit', String(params.limit))
 
   const res = await fetch(`/api/games/list?${q.toString()}`)

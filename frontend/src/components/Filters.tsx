@@ -1,8 +1,10 @@
 type Props = {
   type: string
   indie: boolean
+  includeReleased: boolean
   onTypeChange: (t: string) => void
   onIndieChange: (v: boolean) => void
+  onIncludeReleasedChange: (v: boolean) => void
 }
 
 const TYPE_OPTIONS = [
@@ -14,7 +16,7 @@ const TYPE_OPTIONS = [
   { value: 'software', label: 'Software' },
 ]
 
-function Filters({ type, indie, onTypeChange, onIndieChange }: Props) {
+function Filters({ type, indie, includeReleased, onTypeChange, onIndieChange, onIncludeReleasedChange }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-4">
       <select
@@ -33,6 +35,15 @@ function Filters({ type, indie, onTypeChange, onIndieChange }: Props) {
           className="toggle toggle-sm toggle-primary"
           checked={indie}
           onChange={e => onIndieChange(e.target.checked)}
+        />
+      </label>
+      <label className="label cursor-pointer gap-2">
+        <span className="label-text">Show released</span>
+        <input
+          type="checkbox"
+          className="toggle toggle-sm toggle-primary"
+          checked={includeReleased}
+          onChange={e => onIncludeReleasedChange(e.target.checked)}
         />
       </label>
     </div>

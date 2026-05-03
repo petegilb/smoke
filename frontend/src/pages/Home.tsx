@@ -16,6 +16,7 @@ function Home() {
     : 'followers'
   const type = params.get('type') ?? ''
   const indie = params.get('indie') === 'true'
+  const includeReleased = params.get('released') === 'true'
 
   const [state, setState] = useState<{
     status: 'loading' | 'ok' | 'error'
@@ -25,7 +26,7 @@ function Home() {
 
   useEffect(() => {
     let cancelled = false
-    fetchGameList({ sort, type: type || undefined, indie })
+    fetchGameList({ sort, type: type || undefined, indie, includeReleased })
       .then(games => {
         if (!cancelled) setState({ status: 'ok', games })
       })
@@ -35,7 +36,7 @@ function Home() {
     return () => {
       cancelled = true
     }
-  }, [sort, type, indie])
+  }, [sort, type, indie, includeReleased])
 
   const updateParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params)
@@ -89,8 +90,10 @@ function Home() {
         <Filters
           type={type}
           indie={indie}
+          includeReleased={includeReleased}
           onTypeChange={t => updateParam('type', t)}
           onIndieChange={v => updateParam('indie', v ? 'true' : null)}
+          onIncludeReleasedChange={v => updateParam('released', v ? 'true' : null)}
         />
       </div>
 
