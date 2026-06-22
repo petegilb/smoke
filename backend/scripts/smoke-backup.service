@@ -1,0 +1,12 @@
+[Unit]
+Description=smoke Postgres daily backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+# Adjust to wherever the repo lives on the server.
+ExecStart=/root/smoke/backend/scripts/backup.sh
+# Optional overrides:
+# Environment=RETENTION_DAYS=7
+# Environment=BACKUP_DIR=/root/smoke/backups
